@@ -1,0 +1,20 @@
+# Python temporary files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Private complaint data and uploaded photos
+complaints.db
+complaints/uploads/*
+!complaints/uploads/.gitkeep
+
+# Local secrets and environment files
+.env
+.streamlit/secrets.toml
+
+# Local editor files
+.vscode/
+.idea/
+
+# Keep generated cleaned data in the repository if desired.
