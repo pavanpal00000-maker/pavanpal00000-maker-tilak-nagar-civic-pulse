@@ -50,6 +50,73 @@ def setup_database():
                 password_hash TEXT NOT NULL
             )
         """)
+    seed_initial_demo_complaints()
+
+
+
+def seed_initial_demo_complaints():
+    # Insert realistic sample complaints if the database is currently empty.
+    with get_db() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM complaints").fetchone()[0]
+        if count == 0:
+            sample_data = [
+                (
+                    "TNC-20261018-3412",
+                    "2026-10-18 09:15:00",
+                    "Roads and footpaths",
+                    "Multiple deep potholes near Building No. 45, Road No. 3 causing traffic congestion.",
+                    "Building No. 45, Road No. 3, Tilak Nagar, Chembur",
+                    None,
+                    "In Progress",
+                    "2026-10-21 14:30:00",
+                    [
+                        ("Submitted", "Complaint registered via citizen portal.", "2026-10-18 09:15:00"),
+                        ("Under Review", "Ward L road engineering wing notified; site inspection assigned.", "2026-10-19 11:20:00"),
+                        ("In Progress", "Road maintenance crew deployed for cold-mix patch work.", "2026-10-21 14:30:00"),
+                    ]
+                ),
+                (
+                    "TNC-20261022-7890",
+                    "2026-10-22 08:30:00",
+                    "Public toilets",
+                    "Public toilet block near Tilak Nagar Railway Station requires deep sanitization and tap repair.",
+                    "Tilak Nagar Railway Station (West Exit)",
+                    None,
+                    "Resolved",
+                    "2026-10-25 17:00:00",
+                    [
+                        ("Submitted", "Complaint registered via citizen portal.", "2026-10-22 08:30:00"),
+                        ("In Progress", "Sanitation crew deployed by M-West Ward health department.", "2026-10-23 10:00:00"),
+                        ("Resolved", "Plumbing fixtures repaired and deep sanitization completed.", "2026-10-25 17:00:00"),
+                    ]
+                ),
+                (
+                    "TNC-20261026-1145",
+                    "2026-10-26 18:45:00",
+                    "Street lighting",
+                    "Four sodium streetlights off along Sahakar Cinema lane towards Tilak Nagar ground.",
+                    "Sahakar Cinema Lane, Tilak Nagar",
+                    None,
+                    "Submitted",
+                    "2026-10-26 18:45:00",
+                    [
+                        ("Submitted", "Complaint registered on this project portal.", "2026-10-26 18:45:00"),
+                    ]
+                ),
+            ]
+            for cid, c_at, cat, desc, loc, photo, status, u_at, hist in sample_data:
+                connection.execute("""
+                    INSERT INTO complaints (
+                        complaint_id, created_at, category, description,
+                        location, photo_name, status, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (cid, c_at, cat, desc, loc, photo, status, u_at))
+                for h_status, h_note, h_time in hist:
+                    connection.execute("""
+                        INSERT INTO complaint_history (
+                            complaint_id, status, note, changed_at
+                        ) VALUES (?, ?, ?, ?)
+                    """, (cid, h_status, h_note, h_time))
 
 
 def save_complaint(complaint):
