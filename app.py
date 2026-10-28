@@ -65,6 +65,14 @@ CIVIC_CATEGORIES = [
 # Glassmorphic Design System & Custom CSS
 st.markdown("""
 <style>
+    /* ── Hide Streamlit default toolbar (Share, GitHub, Star, Edit buttons) ── */
+    [data-testid="stToolbar"]       { display: none !important; }
+    [data-testid="stHeader"]        { display: none !important; }
+    [data-testid="stDecoration"]    { display: none !important; }
+    .stDeployButton                 { display: none !important; }
+    header                          { display: none !important; }
+    /* ─────────────────────────────────────────────────────────────────────── */
+
     :root {
         --forest: #1b4d3e;
         --forest-dark: #103328;
