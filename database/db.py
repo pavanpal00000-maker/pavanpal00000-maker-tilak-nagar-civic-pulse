@@ -1,19 +1,25 @@
 from pathlib import Path
 import sqlite3
+import contextlib
 
 # Keep the database in the project root.
 PROJECT_FOLDER = Path(__file__).resolve().parents[1]
 DATABASE_FILE = PROJECT_FOLDER / "complaints.db"
 
 
-def get_connection():
-    # Open a connection to the complaint database.
-    return sqlite3.connect(DATABASE_FILE)
+@contextlib.contextmanager
+def get_db():
+    conn = sqlite3.connect(DATABASE_FILE)
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def setup_database():
     # Create the tables when the app runs for the first time.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.execute("""
             CREATE TABLE IF NOT EXISTS complaints (
                 complaint_id TEXT PRIMARY KEY,
@@ -48,7 +54,7 @@ def setup_database():
 
 def save_complaint(complaint):
     # Save the complaint details in the database.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.execute("""
             INSERT INTO complaints (
                 complaint_id, created_at, category, description,
@@ -80,7 +86,7 @@ def save_complaint(complaint):
 
 def find_complaint(complaint_id):
     # Return one complaint using its ID.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.row_factory = sqlite3.Row
         return connection.execute(
             "SELECT * FROM complaints WHERE complaint_id = ?",
@@ -90,7 +96,7 @@ def find_complaint(complaint_id):
 
 def get_complaint_history(complaint_id):
     # Return all status updates for one complaint.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.row_factory = sqlite3.Row
         return connection.execute("""
             SELECT status, note, changed_at
@@ -102,7 +108,7 @@ def get_complaint_history(complaint_id):
 
 def update_complaint_status(complaint_id, status, note, changed_at):
     # Update the current status and save the status history.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.execute("""
             UPDATE complaints
             SET status = ?, updated_at = ?
@@ -118,10 +124,33 @@ def update_complaint_status(complaint_id, status, note, changed_at):
 
 def get_all_complaints():
     # Return all complaints for the admin page.
-    with get_connection() as connection:
+    with get_db() as connection:
         connection.row_factory = sqlite3.Row
         return connection.execute("""
-            SELECT complaint_id, created_at, category, location, status, updated_at
+            SELECT complaint_id, created_at, category, location, description, photo_name, status, updated_at
             FROM complaints
             ORDER BY created_at DESC
         """).fetchall()
+
+
+def update_complaint_full(complaint_id, category, location, description, status, note, changed_at):
+    # Update full complaint details and record the audit history.
+    with get_db() as connection:
+        connection.execute("""
+            UPDATE complaints
+            SET category = ?, location = ?, description = ?, status = ?, updated_at = ?
+            WHERE complaint_id = ?
+        """, (category, location, description, status, changed_at, complaint_id))
+
+        connection.execute("""
+            INSERT INTO complaint_history (
+                complaint_id, status, note, changed_at
+            ) VALUES (?, ?, ?, ?)
+        """, (complaint_id, status, note, changed_at))
+
+
+def delete_complaint(complaint_id):
+    # Remove a complaint and its history records.
+    with get_db() as connection:
+        connection.execute("DELETE FROM complaint_history WHERE complaint_id = ?", (complaint_id,))
+        connection.execute("DELETE FROM complaints WHERE complaint_id = ?", (complaint_id,))

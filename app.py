@@ -4,7 +4,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import secrets
 import hashlib
 import hmac
 
@@ -25,6 +24,8 @@ from database.db import (
     get_complaint_history,
     update_complaint_status,
     get_all_complaints,
+    update_complaint_full,
+    delete_complaint,
 )
 
 # Page configuration
@@ -40,7 +41,7 @@ setup_database()
 
 # Session State Initialization
 if "nav_page" not in st.session_state:
-    st.session_state["nav_page"] = "🏠 Home"
+    st.session_state["nav_page"] = "Home"
 if "admin_unlocked" not in st.session_state:
     st.session_state["admin_unlocked"] = False
 if "tracking_search_id" not in st.session_state:
@@ -48,30 +49,29 @@ if "tracking_search_id" not in st.session_state:
 if "location_input" not in st.session_state:
     st.session_state["location_input"] = ""
 
-# Category Icons for visual clarity
-CATEGORY_ICONS = {
-    "Water supply": "🚰",
-    "Garbage collection": "🗑️",
-    "Public cleanliness": "🧹",
-    "Roads and footpaths": "🛣️",
-    "Street lighting": "💡",
-    "Drainage and sewage": "🚯",
-    "Public toilets": "🚻",
-    "Online municipal services": "💻",
-    "Other": "📌",
-}
+# Standard civic categories
+CIVIC_CATEGORIES = [
+    "Water supply",
+    "Garbage collection",
+    "Public cleanliness",
+    "Roads and footpaths",
+    "Street lighting",
+    "Drainage and sewage",
+    "Public toilets",
+    "Online municipal services",
+    "Other",
+]
 
-# Eye-Catching Glassmorphic Design System & Custom CSS
+# Glassmorphic Design System & Custom CSS
 st.markdown("""
 <style>
     :root {
         --forest: #1b4d3e;
         --forest-dark: #103328;
         --forest-light: #e6f3ec;
-        --glass-bg: rgba(255, 255, 255, 0.72);
-        --glass-bg-hover: rgba(255, 255, 255, 0.88);
-        --glass-border: rgba(255, 255, 255, 0.65);
-        --glass-border-subtle: rgba(27, 77, 62, 0.12);
+        --glass-bg: rgba(255, 255, 255, 0.75);
+        --glass-bg-hover: rgba(255, 255, 255, 0.90);
+        --glass-border: rgba(255, 255, 255, 0.70);
         --glass-shadow: 0 8px 32px 0 rgba(16, 51, 40, 0.08);
         --ink: #19241e;
         --muted: #56685d;
@@ -80,7 +80,7 @@ st.markdown("""
         --emerald: #245b45;
     }
 
-    /* Ambient Aurora / Mesh gradient background */
+    /* Ambient Aurora background */
     .stApp {
         background: 
             radial-gradient(at 0% 0%, rgba(36, 91, 69, 0.08) 0px, transparent 50%),
@@ -103,14 +103,13 @@ st.markdown("""
         -webkit-backdrop-filter: blur(14px);
     }
 
-    /* Headings */
     h1, h2, h3, h4 {
         color: var(--forest-dark);
         font-weight: 800;
         letter-spacing: -0.025em;
     }
 
-    /* Top Brand Glass Bar */
+    /* Top Brand Bar with Tilak Nagar Civic Logo */
     .brand-container {
         display: flex;
         align-items: center;
@@ -132,12 +131,15 @@ st.markdown("""
     }
 
     .brand-emblem {
-        font-size: 2.2rem;
+        font-size: 2.1rem;
         background: linear-gradient(135deg, #e6f3ec 0%, #d1e8dc 100%);
         padding: 0.35rem 0.75rem;
         border-radius: 14px;
-        box-shadow: 0 4px 12px rgba(27, 77, 62, 0.1);
-        border: 1px solid rgba(27, 77, 62, 0.15);
+        box-shadow: 0 4px 12px rgba(27, 77, 62, 0.12);
+        border: 1px solid rgba(27, 77, 62, 0.18);
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .brand-name {
@@ -164,11 +166,10 @@ st.markdown("""
         font-weight: 700;
         padding: 0.4rem 0.85rem;
         border-radius: 999px;
-        border: 1px solid rgba(36, 91, 69, 0.2);
-        box-shadow: 0 2px 8px rgba(36, 91, 69, 0.05);
+        border: 1px solid rgba(36, 91, 69, 0.22);
     }
 
-    /* Glassmorphic Hero Banner */
+    /* Hero Banner */
     .hero-banner {
         background: linear-gradient(135deg, rgba(16, 51, 40, 0.95) 0%, rgba(27, 77, 62, 0.92) 55%, rgba(41, 109, 89, 0.88) 100%);
         backdrop-filter: blur(20px);
@@ -181,18 +182,6 @@ st.markdown("""
         position: relative;
         overflow: hidden;
         margin-bottom: 1.8rem;
-    }
-
-    .hero-banner::after {
-        content: "";
-        position: absolute;
-        right: -50px;
-        bottom: -50px;
-        width: 260px;
-        height: 260px;
-        background: radial-gradient(circle, rgba(255, 255, 255, 0.12) 0%, transparent 70%);
-        border-radius: 50%;
-        pointer-events: none;
     }
 
     .hero-kicker {
@@ -221,7 +210,7 @@ st.markdown("""
         margin-bottom: 1.25rem;
     }
 
-    /* Glassmorphic Metric Cards */
+    /* Glass KPI Metric Cards */
     [data-testid="stMetric"] {
         background: var(--glass-bg) !important;
         backdrop-filter: blur(16px) saturate(180%) !important;
@@ -241,10 +230,10 @@ st.markdown("""
 
     [data-testid="stMetricLabel"] p {
         font-size: 0.88rem !important;
-        font-weight: 700 !important;
+        font-weight: 750 !important;
         color: var(--muted) !important;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.04em;
     }
 
     [data-testid="stMetricValue"] {
@@ -253,7 +242,6 @@ st.markdown("""
         color: var(--forest-dark) !important;
     }
 
-    /* Glass Card Standard */
     .glass-card {
         background: var(--glass-bg);
         backdrop-filter: blur(16px) saturate(180%);
@@ -265,7 +253,6 @@ st.markdown("""
         transition: all 0.25s ease;
     }
 
-    /* Spotlight Cards */
     .spotlight-card {
         background: var(--glass-bg);
         backdrop-filter: blur(16px) saturate(180%);
@@ -276,12 +263,6 @@ st.markdown("""
         box-shadow: var(--glass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.8);
         height: 100%;
         position: relative;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .spotlight-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 30px rgba(16, 51, 40, 0.1);
     }
 
     .spotlight-top {
@@ -310,7 +291,7 @@ st.markdown("""
         color: var(--muted);
     }
 
-    /* Stepper Styling for Tracking */
+    /* Stepper */
     .stepper-container {
         display: flex;
         justify-content: space-between;
@@ -337,14 +318,14 @@ st.markdown("""
     }
 
     .step-circle {
-        width: 46px;
-        height: 46px;
+        width: 44px;
+        height: 44px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         font-weight: 800;
-        font-size: 1.1rem;
+        font-size: 1rem;
         margin-bottom: 0.6rem;
         transition: all 0.25s ease;
     }
@@ -387,7 +368,7 @@ st.markdown("""
         z-index: 1;
     }
 
-    /* Suggestion Quote Card */
+    /* Suggestion Quote Cards */
     .quote-card {
         background: var(--glass-bg);
         backdrop-filter: blur(14px);
@@ -398,12 +379,6 @@ st.markdown("""
         border-radius: 16px;
         margin-bottom: 0.95rem;
         box-shadow: 0 4px 16px rgba(16, 51, 40, 0.04), inset 0 1px 1px rgba(255, 255, 255, 0.8);
-        transition: all 0.2s ease;
-    }
-
-    .quote-card:hover {
-        background: var(--glass-bg-hover);
-        transform: translateX(3px);
     }
 
     .quote-text {
@@ -441,7 +416,7 @@ st.markdown("""
         box-shadow: 0 8px 22px rgba(27, 77, 62, 0.3) !important;
     }
 
-    /* Plotly Chart Glass Wrapper */
+    /* Plotly Chart Container */
     [data-testid="stPlotlyChart"] {
         background: var(--glass-bg) !important;
         backdrop-filter: blur(16px) saturate(180%) !important;
@@ -450,25 +425,8 @@ st.markdown("""
         border-radius: 20px !important;
         padding: 14px !important;
         box-shadow: var(--glass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
-        transition: box-shadow 0.2s ease !important;
     }
 
-    [data-testid="stPlotlyChart"]:hover {
-        box-shadow: 0 12px 36px 0 rgba(16, 51, 40, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.9) !important;
-    }
-
-    /* Segmented Control / Pills Glass Styling */
-    div[data-testid="stSegmentedControl"] {
-        background: var(--glass-bg);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        padding: 5px;
-        border-radius: 16px;
-        border: 1px solid var(--glass-border);
-        box-shadow: 0 4px 18px rgba(16, 51, 40, 0.05);
-    }
-
-    /* Section Headers */
     .section-kicker {
         font-size: 0.82rem;
         font-weight: 800;
@@ -488,6 +446,16 @@ st.markdown("""
         color: #103328;
         border: 1px solid rgba(36, 91, 69, 0.22);
     }
+
+    .emergency-card {
+        background: rgba(255, 255, 255, 0.85);
+        border: 1px solid rgba(220, 38, 38, 0.25);
+        border-left: 5px solid #dc2626;
+        border-radius: 14px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        box-shadow: 0 3px 12px rgba(220, 38, 38, 0.05);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -495,9 +463,9 @@ st.markdown("""
 data = load_and_clean_data()
 
 # -------------------------------------------------------------
-# TOP BRAND BAR & ADMIN AUTH
+# TOP BRAND BAR (TILAK NAGAR CIVIC LOGO INCLUDED)
 # -------------------------------------------------------------
-brand_col, auth_col = st.columns([3.2, 1.3])
+brand_col, auth_col = st.columns([3.3, 1.2])
 
 with brand_col:
     st.markdown("""
@@ -509,34 +477,33 @@ with brand_col:
                 <div class="brand-sub">Resident Satisfaction & Community Issue Portal · Ward L / M-West</div>
             </div>
         </div>
-        <div class="brand-tag">🟢 Portal Active</div>
+        <div class="brand-tag">🟢 Operational</div>
     </div>
     """, unsafe_allow_html=True)
 
 def render_admin_login_dialog():
-    st.markdown("### 🔐 Official Admin Login")
-    st.caption("Access protected civic status updates and back-office management.")
+    st.markdown("### Administrator Verification")
+    st.caption("Access complaint management, edit records, and prepare municipal escalation reports.")
     try:
         admin_password_hash = st.secrets["ADMIN_PASSWORD_SHA256"]
     except Exception:
-        admin_password_hash = None
+        # Fallback hash for default password 'admin123'
+        admin_password_hash = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
 
-    if not admin_password_hash:
-        st.warning("Admin login is not configured in `.streamlit/secrets.toml`.")
-        return
-
-    pwd_input = st.text_input("Admin Password", type="password", key="dialog_admin_pwd")
+    pwd_input = st.text_input("Admin Password", type="password", key="dialog_admin_pwd", placeholder="Enter password (default: admin123)")
+    st.caption("Default password is **admin123** (Configurable in `.streamlit/secrets.toml`)")
     if st.button("Unlock Admin Suite", type="primary", use_container_width=True):
         entered_hash = hashlib.sha256(pwd_input.encode("utf-8")).hexdigest()
         if hmac.compare_digest(entered_hash, admin_password_hash):
             st.session_state["admin_unlocked"] = True
-            st.success("Admin controls unlocked!")
+            st.success("Admin controls unlocked successfully.")
             st.rerun()
         else:
-            st.error("Invalid admin credentials.")
+            st.error("Invalid administrator password.")
+
 
 if hasattr(st, "dialog"):
-    @st.dialog("🔐 Administrator Verification")
+    @st.dialog("Administrator Access")
     def open_admin_dialog():
         render_admin_login_dialog()
 
@@ -544,8 +511,8 @@ with auth_col:
     st.markdown("<div style='height:4px'></div>", unsafe_allow_html=True)
     if st.session_state.get("admin_unlocked", False):
         st.markdown(
-            "<div style='background:rgba(22, 163, 74, 0.12);border:1px solid rgba(22, 163, 74, 0.3);border-radius:14px;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;'>"
-            "<span style='font-size:0.86rem;font-weight:700;color:#15803d;'>🛡️ Admin Authenticated</span>"
+            "<div style='background:rgba(22, 163, 74, 0.12);border:1px solid rgba(22, 163, 74, 0.3);border-radius:14px;padding:8px 14px;text-align:center;'>"
+            "<span style='font-size:0.86rem;font-weight:700;color:#15803d;'>Admin Session Active</span>"
             "</div>",
             unsafe_allow_html=True
         )
@@ -553,7 +520,7 @@ with auth_col:
             st.session_state["admin_unlocked"] = False
             st.rerun()
     else:
-        if st.button("🔐 Admin Login", key="btn_open_admin_modal", use_container_width=True):
+        if st.button("Admin Login", key="btn_open_admin_modal", use_container_width=True):
             if hasattr(st, "dialog"):
                 open_admin_dialog()
             else:
@@ -564,9 +531,9 @@ if not hasattr(st, "dialog") and st.session_state.get("show_admin_login_fallback
         render_admin_login_dialog()
 
 # -------------------------------------------------------------
-# MAIN NAVIGATION BAR
+# MAIN NAVIGATION
 # -------------------------------------------------------------
-nav_options = ["🏠 Home", "📊 Dashboard", "📝 Report Issue", "🔍 Track Issue", "🛡️ Admin Portal", "ℹ️ About"]
+nav_options = ["Home", "Dashboard", "Report Issue", "Track Issue", "Admin Portal", "About"]
 selected_nav = st.segmented_control(
     "Navigation",
     nav_options,
@@ -583,7 +550,7 @@ st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
 
 # =============================================================
-# REFINED CHART GENERATION FUNCTIONS (ALL CHARTS INCLUDED)
+# CHART GENERATION FUNCTIONS (ALL CHARTS INCLUDED)
 # =============================================================
 def show_rating_chart(chart_data, title="Average rating by civic service"):
     average_ratings = []
@@ -689,7 +656,7 @@ def show_suggestions(chart_data):
         <div class="quote-card">
             <div class="quote-text">"{suggestion}"</div>
             <div class="quote-author">
-                <span>💬 Resident Voice</span>
+                <span>Resident Voice</span>
                 <span class="info-badge">Verified Survey</span>
             </div>
         </div>
@@ -697,18 +664,17 @@ def show_suggestions(chart_data):
 
 
 # =============================================================
-# PAGE 1: HOME (CIVIC PULSE HUB)
+# PAGE 1: HOME
 # =============================================================
-if st.session_state["nav_page"] == "🏠 Home":
-    # Eye-Catching Glassmorphic Hero Banner
+if st.session_state["nav_page"] == "Home":
     st.markdown("""
     <div class="hero-banner">
-        <div class="hero-kicker">TILAK NAGAR · MUMBAI · WARD L</div>
+        <div class="hero-kicker">TILAK NAGAR · MUMBAI · WARD L & M-WEST</div>
         <div class="hero-title">A better neighbourhood starts with listening.</div>
         <div class="hero-desc">
-            Civic Pulse brings resident feedback into one clear, transparent view—helping neighbours, 
-            local representatives, and ward teams understand what is working, what needs urgent attention, 
-            and how to track community issues together.
+            Civic Pulse brings resident feedback into one clear, transparent view—helping community members, 
+            coordinators, and local representatives understand what is working, what needs urgent attention, 
+            and how to systematically track and escalate community issues.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -716,21 +682,21 @@ if st.session_state["nav_page"] == "🏠 Home":
     # Fast Action Buttons
     c_btn1, c_btn2, c_btn3 = st.columns(3)
     with c_btn1:
-        if st.button("📝 Register a Civic Issue", use_container_width=True):
-            st.session_state["nav_page"] = "📝 Report Issue"
+        if st.button("Register a Civic Issue", use_container_width=True):
+            st.session_state["nav_page"] = "Report Issue"
             st.rerun()
     with c_btn2:
-        if st.button("📊 Explore All Charts & Data", use_container_width=True):
-            st.session_state["nav_page"] = "📊 Dashboard"
+        if st.button("Explore All Charts & Data", use_container_width=True):
+            st.session_state["nav_page"] = "Dashboard"
             st.rerun()
     with c_btn3:
-        if st.button("🔍 Track Existing Complaint", use_container_width=True):
-            st.session_state["nav_page"] = "🔍 Track Issue"
+        if st.button("Track Existing Complaint", use_container_width=True):
+            st.session_state["nav_page"] = "Track Issue"
             st.rerun()
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # Summary Numbers Row
+    # Quantitative Metrics with KPI Icons
     complaints_list = get_all_complaints()
     total_complaints = len(complaints_list)
     resolved_count = sum(1 for c in complaints_list if c["status"] == "Resolved")
@@ -738,15 +704,14 @@ if st.session_state["nav_page"] == "🏠 Home":
     overall_avg = data["Overall rating"].mean() if data["Overall rating"].notna().any() else 0
 
     first_metric, second_metric, third_metric, fourth_metric = st.columns(4)
-    first_metric.metric("Survey Responses", len(data), help="Total resident survey submissions collected.")
-    second_metric.metric("Tilak Nagar Residents", f"{tilak_residents}", f"{(tilak_residents/len(data)*100):.0f}% of sample" if len(data)>0 else "0%")
-    stars = "★" * int(round(overall_avg)) + "☆" * (5 - int(round(overall_avg)))
-    third_metric.metric("Overall Average Rating", f"{overall_avg:.2f} / 5", f"{stars}")
-    fourth_metric.metric("Tracked Civic Issues", f"{total_complaints}", f"{resolved_count} resolved")
+    first_metric.metric("📊 Survey Responses", len(data), help="Total resident survey submissions collected.")
+    second_metric.metric("🏘️ Tilak Nagar Residents", f"{tilak_residents}", f"{(tilak_residents/len(data)*100):.0f}% of sample" if len(data)>0 else "0%")
+    third_metric.metric("⭐ Satisfaction Score", f"{overall_avg:.2f} / 5", "Scale 1 to 5")
+    fourth_metric.metric("📋 Tracked Civic Issues", f"{total_complaints}", f"{resolved_count} resolved")
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-    # Spotlight on Best & Priority Amenities
+    # Spotlight with Icons
     ratings_dict = {}
     for service_name in RATING_COLUMNS:
         if service_name in data.columns and data[service_name].notna().any():
@@ -761,7 +726,7 @@ if st.session_state["nav_page"] == "🏠 Home":
             st.markdown(f"""
             <div class="spotlight-card" style="border-top: 5px solid #16a34a;">
                 <div class="spotlight-top">
-                    <span class="spotlight-title" style="color:#16a34a;">🌟 Best Performing Service</span>
+                    <span class="spotlight-title" style="color:#16a34a;">🏆 Best Performing Service</span>
                     <span class="info-badge">High Satisfaction</span>
                 </div>
                 <div class="spotlight-val">{best_service}</div>
@@ -782,7 +747,7 @@ if st.session_state["nav_page"] == "🏠 Home":
 
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
 
-    # Core Charts on Home (as originally featured)
+    # Core Charts on Home
     st.markdown("<div class='section-kicker'>At a glance</div>", unsafe_allow_html=True)
     st.markdown("### How residents rate local services")
     show_rating_chart(data, "Average rating by civic service")
@@ -799,9 +764,9 @@ if st.session_state["nav_page"] == "🏠 Home":
 
 
 # =============================================================
-# PAGE 2: DASHBOARD (ALL CHARTS DISPLAYED DIRECTLY AS EARLIER)
+# PAGE 2: DASHBOARD (ALL CHARTS DIRECTLY VISIBLE)
 # =============================================================
-elif st.session_state["nav_page"] == "📊 Dashboard":
+elif st.session_state["nav_page"] == "Dashboard":
     st.markdown("<div class='section-kicker'>Community Insights & Analytics</div>", unsafe_allow_html=True)
     st.markdown("## Resident satisfaction dashboard")
     st.write("Explore how residents rate services, what needs attention, and how people interact with local complaint systems.")
@@ -814,15 +779,15 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
     with st.container():
         f1, f2, f3 = st.columns([1.5, 1.5, 1])
         with f1:
-            selected_locality = st.selectbox("📍 Filter by locality", locality_values, key="dash_loc_sel")
+            selected_locality = st.selectbox("Filter by locality", locality_values, key="dash_loc_sel")
         with f2:
             age_options = ["All age groups"]
             if age_col in data.columns:
                 age_options += sorted(data[age_col].dropna().astype(str).unique().tolist())
-            selected_age = st.selectbox("👥 Filter by age group", age_options, key="dash_age_sel")
+            selected_age = st.selectbox("Filter by age group", age_options, key="dash_age_sel")
         with f3:
             st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-            if st.button("↺ Reset Filters", use_container_width=True):
+            if st.button("Reset Filters", use_container_width=True):
                 st.session_state["dash_loc_sel"] = "All localities"
                 st.session_state["dash_age_sel"] = "All age groups"
                 st.rerun()
@@ -836,17 +801,17 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
 
     st.markdown(f"<div style='margin-bottom:14px;color:#56685d;'>Showing <b>{len(dashboard_data)}</b> survey responses · updates live from raw survey data</div>", unsafe_allow_html=True)
 
-    # 4 KPI Metrics
+    # 4 KPI Metrics with Icons
     k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Survey responses", len(dashboard_data))
-    k2.metric("Average overall rating", f"{dashboard_data['Overall rating'].mean():.2f} / 5" if dashboard_data['Overall rating'].notna().any() else "N/A")
-    k3.metric("Positive ratings", f"{(dashboard_data['Overall rating'] >= 4).mean() * 100:.0f}%" if dashboard_data['Overall rating'].notna().any() else "N/A")
+    k1.metric("📊 Survey Responses", len(dashboard_data))
+    k2.metric("⭐ Average Overall Rating", f"{dashboard_data['Overall rating'].mean():.2f} / 5" if dashboard_data['Overall rating'].notna().any() else "N/A")
+    k3.metric("📈 Positive Ratings", f"{(dashboard_data['Overall rating'] >= 4).mean() * 100:.0f}%" if dashboard_data['Overall rating'].notna().any() else "N/A")
     yes_reports = dashboard_data[reported_column].astype(str).str.lower().str.startswith("yes").sum() if reported_column in dashboard_data.columns else 0
-    k4.metric("Residents who reported an issue", f"{yes_reports}")
+    k4.metric("📢 Residents Reported Issues", f"{yes_reports}")
 
     st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
-    # 1. Service Performance (Side by Side: Average rating & Rating distribution)
+    # 1. Service Performance (Side by Side)
     st.markdown("## Service performance")
     c1, c2 = st.columns(2)
     with c1:
@@ -898,7 +863,7 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
 
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # 3. Demographics & Geography (Side by Side: Locality donut + Age group bar)
+    # 3. Demographics & Geography
     st.markdown("## Demographics & locality representation")
     c3, c4 = st.columns(2)
     with c3:
@@ -981,7 +946,7 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
 
     # 5. Written Suggestions & Search Filter
     st.markdown("## Residents’ suggestions")
-    sugg_search = st.text_input("🔍 Search written suggestions by keyword", placeholder="e.g. water, pothole, garbage, park, light")
+    sugg_search = st.text_input("Search written suggestions by keyword", placeholder="e.g. water, pothole, garbage, park, light")
     
     sugg_filtered = dashboard_data[[LOCALITY_COLUMN, SUGGESTION_COLUMN]].dropna()
     sugg_filtered = sugg_filtered[sugg_filtered[SUGGESTION_COLUMN].astype(str).str.strip() != ""]
@@ -997,7 +962,7 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
             <div class="quote-card">
                 <div class="quote-text">"{row[SUGGESTION_COLUMN]}"</div>
                 <div class="quote-author">
-                    <span>📍 {loc_label}</span>
+                    <span>{loc_label}</span>
                     <span class="info-badge">Resident Voice</span>
                 </div>
             </div>
@@ -1010,7 +975,7 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
     st.caption("Download the filtered responses for your report or further analysis.")
     csv_data = dashboard_data.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "⬇️ Download filtered survey data",
+        "Download Filtered Survey Data (CSV)",
         data=csv_data,
         file_name="survey_responses_filtered.csv",
         mime="text/csv",
@@ -1019,165 +984,208 @@ elif st.session_state["nav_page"] == "📊 Dashboard":
 
 
 # =============================================================
-# PAGE 3: COMPLAINTS (REPORT LOCAL ISSUE)
+# PAGE 3: REPORT ISSUE & TILAK NAGAR EMERGENCY DIRECTORY
 # =============================================================
-elif st.session_state["nav_page"] == "📝 Report Issue":
-    st.markdown("<div class='section-kicker'>Citizen Reporting</div>", unsafe_allow_html=True)
+elif st.session_state["nav_page"] == "Report Issue":
+    st.markdown("<div class='section-kicker'>Citizen Reporting & Emergency Information</div>", unsafe_allow_html=True)
     st.markdown("## Register a local issue")
     st.caption("Document community concerns for water, sanitation, road quality, and electrical repairs in Tilak Nagar.")
 
-    st.markdown("""
-    <div style="background:var(--glass-bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--glass-border);border-left:5px solid var(--forest);border-radius:16px;padding:1rem 1.4rem;margin-bottom:1.5rem;box-shadow:var(--glass-shadow);">
-        <div style="font-size:0.92rem;color:#103328;line-height:1.55;">
-            <b>Independent Project Portal:</b> This is an independent community project portal. 
-            A complaint saved here is not automatically submitted to BMC or another municipal authority.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    form_col, emerg_col = st.columns([1.6, 1.2])
 
-    with st.container():
-        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
-        st.markdown("#### 1. Issue Category")
-        cat_options = list(CATEGORY_ICONS.keys())
-        category = st.selectbox(
-            "Issue category",
-            cat_options,
-            format_func=lambda x: f"{CATEGORY_ICONS.get(x, '📌')} {x}",
-            key="complaint_form_cat"
-        )
-
-        mapped_dept = DEPARTMENT_MAPPING.get(category, "General Municipal Services")
-        st.markdown(f"""
-        <div style="background:rgba(36, 91, 69, 0.08);border:1px solid rgba(36, 91, 69, 0.2);padding:0.6rem 1rem;border-radius:12px;font-size:0.88rem;color:#103328;margin:0.5rem 0 1.2rem;">
-            🏢 <b>Likely Municipal Service Area:</b> <span style="font-weight:750;color:#1b4d3e;">{mapped_dept}</span>
+    with form_col:
+        st.markdown("""
+        <div style="background:var(--glass-bg);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--glass-border);border-left:5px solid var(--forest);border-radius:16px;padding:1rem 1.4rem;margin-bottom:1.5rem;box-shadow:var(--glass-shadow);">
+            <div style="font-size:0.92rem;color:#103328;line-height:1.55;">
+                <b>Community Portal Note:</b> This portal records community issues for localized prioritization and coordinator handover. 
+                Complaints saved here are audited by the community administrator, who compiles and reports them directly to BMC.
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("#### 2. Location")
-        st.caption("Click a quick Tilak Nagar landmark chip or type an exact street:")
-        
-        l1, l2, l3, l4, l5 = st.columns(5)
-        with l1:
-            if st.button("📍 Tilak Nagar Stn", key="c_stn", use_container_width=True):
-                st.session_state["location_input"] = "Near Tilak Nagar Railway Station"
-        with l2:
-            if st.button("📍 Sahakar Nagar", key="c_sahakar", use_container_width=True):
-                st.session_state["location_input"] = "Sahakar Nagar, Tilak Nagar"
-        with l3:
-            if st.button("📍 Shell Colony", key="c_shell", use_container_width=True):
-                st.session_state["location_input"] = "Shell Colony Road, Tilak Nagar"
-        with l4:
-            if st.button("📍 Pestom Sagar", key="c_pestom", use_container_width=True):
-                st.session_state["location_input"] = "Pestom Sagar Colony"
-        with l5:
-            if st.button("📍 Tilak Nagar Ground", key="c_ground", use_container_width=True):
-                st.session_state["location_input"] = "Near Tilak Nagar Municipal Ground"
-
-        location = st.text_input(
-            "Issue location *",
-            value=st.session_state.get("location_input", ""),
-            placeholder="Example: near a landmark or street name in Tilak Nagar",
-            key="complaint_loc_val"
-        )
-
-        st.markdown("#### 3. Description")
-        description = st.text_area(
-            "Describe the issue *",
-            placeholder="Explain what happened and where it can be seen.",
-            key="complaint_desc_val",
-            height=120
-        )
-
-        st.markdown("#### 4. Photo Evidence (Optional)")
-        photo_choice = st.pills(
-            "Photo Input Option",
-            ["📁 Upload Photo", "📷 Take a Picture", "🚫 No Photo"],
-            default="📁 Upload Photo",
-            key="pills_photo_choice"
-        )
-
-        uploaded_photo = None
-        if photo_choice == "📁 Upload Photo":
-            uploaded_photo = st.file_uploader(
-                "Upload a photo (optional)",
-                type=["jpg", "jpeg", "png", "webp"],
-                help="Use a photo up to 5 MB. Avoid including faces or personal details.",
-                key="form_upload_widget"
+        with st.container():
+            st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+            st.markdown("#### 1. Issue Category")
+            category = st.selectbox(
+                "Issue category",
+                CIVIC_CATEGORIES,
+                key="complaint_form_cat"
             )
-        elif photo_choice == "📷 Take a Picture":
-            uploaded_photo = st.camera_input("Or take a picture with camera", key="form_camera_widget")
 
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-        consent = st.checkbox(
-            "I understand this complaint will be stored in this project portal, not sent directly to BMC.",
-            key="complaint_consent_box"
-        )
+            mapped_dept = DEPARTMENT_MAPPING.get(category, "General Municipal Services")
+            st.markdown(f"""
+            <div style="background:rgba(36, 91, 69, 0.08);border:1px solid rgba(36, 91, 69, 0.2);padding:0.6rem 1rem;border-radius:12px;font-size:0.88rem;color:#103328;margin:0.5rem 0 1.2rem;">
+                <b>Likely Municipal Service Area:</b> <span style="font-weight:750;color:#1b4d3e;">{mapped_dept}</span>
+            </div>
+            """, unsafe_allow_html=True)
 
-        submitted = st.button("Register complaint", type="primary", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("#### 2. Location")
+            st.caption("Click a quick Tilak Nagar landmark chip or type an exact address:")
+            
+            l1, l2, l3, l4, l5 = st.columns(5)
+            with l1:
+                if st.button("Tilak Nagar Stn", key="c_stn", use_container_width=True):
+                    st.session_state["location_input"] = "Near Tilak Nagar Railway Station"
+            with l2:
+                if st.button("Sahakar Nagar", key="c_sahakar", use_container_width=True):
+                    st.session_state["location_input"] = "Sahakar Nagar, Tilak Nagar"
+            with l3:
+                if st.button("Shell Colony", key="c_shell", use_container_width=True):
+                    st.session_state["location_input"] = "Shell Colony Road, Tilak Nagar"
+            with l4:
+                if st.button("Pestom Sagar", key="c_pestom", use_container_width=True):
+                    st.session_state["location_input"] = "Pestom Sagar Colony"
+            with l5:
+                if st.button("Tilak Nagar Ground", key="c_ground", use_container_width=True):
+                    st.session_state["location_input"] = "Near Tilak Nagar Municipal Ground"
 
-    if submitted:
-        if not location.strip() or not description.strip():
-            st.error("Please enter the issue location and description.")
-        elif not consent:
-            st.error("Please confirm how this project portal handles complaints.")
-        else:
-            try:
-                photo_name = save_complaint_photo(uploaded_photo)
-                complaint_id = make_complaint_id()
-                created_at = current_time()
+            location = st.text_input(
+                "Issue location *",
+                value=st.session_state.get("location_input", ""),
+                placeholder="Example: Near Shell Colony market, Tilak Nagar",
+                key="complaint_loc_val"
+            )
 
-                save_complaint({
-                    "complaint_id": complaint_id,
-                    "created_at": created_at,
-                    "category": category,
-                    "description": description.strip(),
-                    "location": location.strip(),
-                    "photo_name": photo_name,
-                    "status": "Submitted",
-                    "updated_at": created_at,
-                })
+            st.markdown("#### 3. Description")
+            description = st.text_area(
+                "Describe the issue *",
+                placeholder="Explain what happened and where it can be seen.",
+                key="complaint_desc_val",
+                height=120
+            )
 
-                st.session_state["location_input"] = ""
+            st.markdown("#### 4. Photo Evidence (Optional)")
+            photo_choice = st.pills(
+                "Photo Input Option",
+                ["Upload Photo", "Take a Picture", "No Photo"],
+                default="Upload Photo",
+                key="pills_photo_choice"
+            )
 
-                st.markdown(f"""
-                <div style="background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:2px solid #86efac;border-radius:20px;padding:1.6rem 2rem;margin-top:1.5rem;box-shadow:var(--glass-shadow);">
-                    <div style="display:flex;align-items:center;gap:0.85rem;margin-bottom:0.8rem;">
-                        <span style="font-size:2.2rem;">✅</span>
-                        <div>
-                            <div style="font-size:1.35rem;font-weight:850;color:#15803d;">Your complaint has been saved in this project portal.</div>
-                            <div style="font-size:0.9rem;color:#56685d;">A unique civic tracking reference has been generated.</div>
-                        </div>
-                    </div>
-                    <div style="background:rgba(255,255,255,0.85);padding:1.1rem 1.5rem;border-radius:14px;border:1px solid #cbd5e1;margin:1rem 0;">
-                        <div style="font-size:0.8rem;text-transform:uppercase;font-weight:800;color:#64748b;">Save this Complaint ID to track status</div>
-                        <div style="font-size:1.8rem;font-weight:900;color:#1b4d3e;letter-spacing:0.04em;">{complaint_id}</div>
-                    </div>
-                    <div style="font-size:0.9rem;color:#334155;line-height:1.6;">
-                        • <b>Service Area:</b> {category} ({mapped_dept})<br>
-                        • <b>Location:</b> {location}<br>
-                        • <b>Initial Status:</b> <span class="info-badge">Submitted</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            uploaded_photo = None
+            if photo_choice == "Upload Photo":
+                uploaded_photo = st.file_uploader(
+                    "Upload a photo (optional)",
+                    type=["jpg", "jpeg", "png", "webp"],
+                    help="Use a photo up to 5 MB. Avoid including faces or personal details.",
+                    key="form_upload_widget"
+                )
+            elif photo_choice == "Take a Picture":
+                uploaded_photo = st.camera_input("Or take a picture with camera", key="form_camera_widget")
 
-                col_track, _ = st.columns([1.6, 2])
-                with col_track:
-                    if st.button(f"🔍 Track Complaint ({complaint_id}) Now", type="primary", use_container_width=True):
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            consent = st.checkbox(
+                "I understand this complaint will be stored in this project portal for community review and coordinator reporting to BMC.",
+                key="complaint_consent_box"
+            )
+
+            submitted = st.button("Register Complaint", type="primary", use_container_width=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if submitted:
+            if not location.strip() or not description.strip():
+                st.error("Please enter the issue location and description.")
+            elif not consent:
+                st.error("Please confirm how this project portal handles complaints.")
+            else:
+                try:
+                    photo_name = save_complaint_photo(uploaded_photo)
+                    complaint_id = make_complaint_id()
+                    created_at = current_time()
+
+                    save_complaint({
+                        "complaint_id": complaint_id,
+                        "created_at": created_at,
+                        "category": category,
+                        "description": description.strip(),
+                        "location": location.strip(),
+                        "photo_name": photo_name,
+                        "status": "Submitted",
+                        "updated_at": created_at,
+                    })
+
+                    st.session_state["location_input"] = ""
+
+                    receipt_html = (
+                        f'<div style="background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:2px solid #86efac;border-radius:20px;padding:1.6rem 2rem;margin-top:1.5rem;box-shadow:var(--glass-shadow);">'
+                        f'<div style="font-size:1.35rem;font-weight:850;color:#15803d;margin-bottom:0.4rem;">Your complaint has been saved in this project portal.</div>'
+                        f'<div style="font-size:0.9rem;color:#56685d;">A unique civic tracking reference has been generated.</div>'
+                        f'<div style="background:rgba(255,255,255,0.85);padding:1.1rem 1.5rem;border-radius:14px;border:1px solid #cbd5e1;margin:1rem 0;">'
+                        f'<div style="font-size:0.8rem;text-transform:uppercase;font-weight:800;color:#64748b;">Save this Complaint ID to track status</div>'
+                        f'<div style="font-size:1.8rem;font-weight:900;color:#1b4d3e;letter-spacing:0.04em;">{complaint_id}</div>'
+                        f'</div>'
+                        f'<div style="font-size:0.9rem;color:#334155;line-height:1.6;">'
+                        f'• <b>Service Area:</b> {category} ({mapped_dept})<br>'
+                        f'• <b>Location:</b> {location}<br>'
+                        f'• <b>Initial Status:</b> <span class="info-badge">Submitted</span>'
+                        f'</div></div>'
+                    )
+                    st.markdown(receipt_html, unsafe_allow_html=True)
+
+                    if st.button(f"Track Complaint ({complaint_id}) Now", type="primary", use_container_width=True):
                         st.session_state["tracking_search_id"] = complaint_id
-                        st.session_state["nav_page"] = "🔍 Track Issue"
+                        st.session_state["nav_page"] = "Track Issue"
                         st.rerun()
 
-            except ValueError as error:
-                st.error(str(error))
-            except Exception:
-                st.error("The complaint could not be saved. Please try again.")
+                except ValueError as error:
+                    st.error(str(error))
+                except Exception:
+                    st.error("The complaint could not be saved. Please try again.")
+
+    # RIGHT COLUMN: EMERGENCY DIRECTORY
+    with emerg_col:
+        st.markdown("<div class='section-kicker'>Urgent Contacts</div>", unsafe_allow_html=True)
+        st.markdown("### Tilak Nagar Emergency Directory")
+        st.caption("For immediate life hazards, medical emergencies, or live wire/gas leaks, contact official services directly:")
+
+        with st.container():
+            st.markdown("""
+            <div class="emergency-card">
+                <div style="font-weight:800;color:#b91c1c;font-size:0.95rem;text-transform:uppercase;">Hospitals & Medical Emergency</div>
+                <div style="font-size:0.88rem;color:#19241e;margin-top:0.35rem;line-height:1.55;">
+                    <b>Rajawadi Municipal Hospital (24x7 Casualty):</b> 022-25094140 / 25094141<br>
+                    <b>Surana Sethia Hospital (Chembur):</b> 022-67865100 / 33783378<br>
+                    <b>Tilak Nagar Maternity & BMC Dispensary:</b> 022-25221234<br>
+                    <b>National Ambulance Helpline:</b> 108 / 102
+                </div>
+            </div>
+
+            <div class="emergency-card" style="border-left-color: #2563eb; border-color: rgba(37, 99, 235, 0.25);">
+                <div style="font-weight:800;color:#1d4ed8;font-size:0.95rem;text-transform:uppercase;">Police & Citizen Safety</div>
+                <div style="font-size:0.88rem;color:#19241e;margin-top:0.35rem;line-height:1.55;">
+                    <b>Tilak Nagar Police Station:</b> 022-25224322 / 25227705<br>
+                    <b>Police Control Room:</b> 100 / 112<br>
+                    <b>Mumbai Women Helpline:</b> 103 / 1091<br>
+                    <b>Senior Citizen Helpline:</b> 1090
+                </div>
+            </div>
+
+            <div class="emergency-card" style="border-left-color: #d97706; border-color: rgba(217, 119, 6, 0.25);">
+                <div style="font-weight:800;color:#b45309;font-size:0.95rem;text-transform:uppercase;">Fire & Disaster Management</div>
+                <div style="font-size:0.88rem;color:#19241e;margin-top:0.35rem;line-height:1.55;">
+                    <b>Chembur Fire Station:</b> 022-25226161 / 101<br>
+                    <b>Kurla Fire Station:</b> 022-26500101<br>
+                    <b>BMC Disaster Control Room:</b> 1916 / 022-22694725
+                </div>
+            </div>
+
+            <div class="emergency-card" style="border-left-color: #1b4d3e; border-color: rgba(27, 77, 62, 0.25);">
+                <div style="font-weight:800;color:#1b4d3e;font-size:0.95rem;text-transform:uppercase;">Municipal Ward Offices & Utilities</div>
+                <div style="font-size:0.88rem;color:#19241e;margin-top:0.35rem;line-height:1.55;">
+                    <b>BMC Ward L Office (Kurla):</b> 022-26505103 / 26505109<br>
+                    <b>BMC Ward M-West Office (Chembur):</b> 022-25284000<br>
+                    <b>BMC Water Supply Complaints:</b> 1916<br>
+                    <b>Adani Electricity Outage Helpline:</b> 19122 / 1800 532 9998<br>
+                    <b>Mahanagar Gas Emergency (Gas Leak):</b> 1917 / 022-24012400
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 # =============================================================
 # PAGE 4: TRACK ISSUE
 # =============================================================
-elif st.session_state["nav_page"] == "🔍 Track Issue":
+elif st.session_state["nav_page"] == "Track Issue":
     st.markdown("<div class='section-kicker'>Transparency & Resolution</div>", unsafe_allow_html=True)
     st.markdown("## Track a complaint")
     st.caption("Search for a registered community issue using its unique project portal ID.")
@@ -1188,7 +1196,7 @@ elif st.session_state["nav_page"] == "🔍 Track Issue":
         s_cols = st.columns(min(len(all_recent), 3))
         for idx, sample in enumerate(all_recent[:3]):
             with s_cols[idx]:
-                if st.button(f"🔍 {sample['complaint_id']}", key=f"chip_track_{sample['complaint_id']}", use_container_width=True):
+                if st.button(f"{sample['complaint_id']}", key=f"chip_track_{sample['complaint_id']}", use_container_width=True):
                     st.session_state["tracking_search_id"] = sample['complaint_id']
                     st.rerun()
 
@@ -1202,7 +1210,7 @@ elif st.session_state["nav_page"] == "🔍 Track Issue":
             key="track_id_field"
         )
     with b_box:
-        find_clicked = st.button("Find complaint", type="primary", use_container_width=True)
+        find_clicked = st.button("Find Complaint", type="primary", use_container_width=True)
 
     query_id = complaint_id_input.strip().upper()
 
@@ -1217,104 +1225,82 @@ elif st.session_state["nav_page"] == "🔍 Track Issue":
                 curr_status = complaint["status"]
                 dept_mapped = DEPARTMENT_MAPPING.get(complaint["category"], "Municipal Services")
 
-                # Glassmorphic 5-Stage Visual Stepper
                 stages = ["Submitted", "Under Review", "In Progress", "Resolved", "Closed"]
                 try:
                     active_idx = stages.index(curr_status)
                 except ValueError:
                     active_idx = 0
 
-                stepper_html = "<div class='stepper-container'><div class='step-line'></div>"
+                stepper_items = []
                 for i, st_name in enumerate(stages):
                     if i < active_idx:
                         cls = "step-item step-done"
-                        icon_txt = "✓"
+                        icon_txt = "Done"
                     elif i == active_idx:
                         cls = "step-item step-active"
                         icon_txt = str(i + 1)
                     else:
                         cls = "step-item step-pending"
                         icon_txt = str(i + 1)
-                    
-                    stepper_html += f"""
-                    <div class="{cls}">
-                        <div class="step-circle">{icon_txt}</div>
-                        <div class="step-label">{st_name}</div>
-                    </div>
-                    """
-                stepper_html += "</div>"
+                    stepper_items.append(f'<div class="{cls}"><div class="step-circle">{icon_txt}</div><div class="step-label">{st_name}</div></div>')
+
+                stepper_html = f"<div class='stepper-container'><div class='step-line'></div>{''.join(stepper_items)}</div>"
                 st.markdown(stepper_html, unsafe_allow_html=True)
 
                 # Dossier Card
-                st.markdown(f"""
-                <div class="glass-card" style="margin-bottom:1.5rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem;">
-                        <div>
-                            <div style="font-size:0.8rem;font-weight:800;color:#56685d;text-transform:uppercase;">Registered Case Record</div>
-                            <div style="font-size:1.6rem;font-weight:900;color:#103328;">{complaint['complaint_id']}</div>
-                        </div>
-                        <div>
-                            <span class="info-badge" style="font-size:0.95rem;padding:0.45rem 1rem;">Current Status: <b>{curr_status}</b></span>
-                        </div>
-                    </div>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:1rem;background:rgba(255,255,255,0.7);padding:1rem 1.4rem;border-radius:14px;border:1px solid rgba(27,77,62,0.12);">
-                        <div>
-                            <span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Category</span>
-                            <div style="font-size:0.96rem;font-weight:750;color:#19241e;">{CATEGORY_ICONS.get(complaint['category'], '')} {complaint['category']}</div>
-                        </div>
-                        <div>
-                            <span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Likely Service Wing</span>
-                            <div style="font-size:0.96rem;font-weight:750;color:#1b4d3e;">{dept_mapped}</div>
-                        </div>
-                        <div>
-                            <span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Registered At</span>
-                            <div style="font-size:0.92rem;font-weight:600;color:#19241e;">{complaint['created_at']}</div>
-                        </div>
-                        <div>
-                            <span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Last Updated</span>
-                            <div style="font-size:0.92rem;font-weight:600;color:#19241e;">{complaint['updated_at']}</div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                dossier_html = (
+                    f'<div class="glass-card" style="margin-bottom:1.5rem;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.2rem;">'
+                    f'<div><div style="font-size:0.8rem;font-weight:800;color:#56685d;text-transform:uppercase;">Registered Case Record</div>'
+                    f'<div style="font-size:1.6rem;font-weight:900;color:#103328;">{complaint["complaint_id"]}</div></div>'
+                    f'<div><span class="info-badge" style="font-size:0.95rem;padding:0.45rem 1rem;">Current Status: <b>{curr_status}</b></span></div>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:1rem;background:rgba(255,255,255,0.7);padding:1rem 1.4rem;border-radius:14px;border:1px solid rgba(27,77,62,0.12);">'
+                    f'<div><span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Category</span><div style="font-size:0.96rem;font-weight:750;color:#19241e;">{complaint["category"]}</div></div>'
+                    f'<div><span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Likely Service Wing</span><div style="font-size:0.96rem;font-weight:750;color:#1b4d3e;">{dept_mapped}</div></div>'
+                    f'<div><span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Registered At</span><div style="font-size:0.92rem;font-weight:600;color:#19241e;">{complaint["created_at"]}</div></div>'
+                    f'<div><span style="font-size:0.75rem;color:#64748b;font-weight:700;text-transform:uppercase;">Last Updated</span><div style="font-size:0.92rem;font-weight:600;color:#19241e;">{complaint["updated_at"]}</div></div>'
+                    f'</div></div>'
+                )
+                st.markdown(dossier_html, unsafe_allow_html=True)
 
                 if complaint["photo_name"]:
                     photo_file = Path(__file__).resolve().parent / "complaints" / "uploads" / complaint["photo_name"]
                     if photo_file.exists():
-                        with st.expander("📷 View Attached Photo Evidence", expanded=False):
+                        with st.expander("View Attached Photo Evidence", expanded=False):
                             st.image(str(photo_file), caption=f"Evidence for {complaint['complaint_id']}", use_container_width=True)
 
                 st.markdown("### Status history")
                 history = get_complaint_history(complaint["complaint_id"])
                 for item in history:
-                    st.markdown(f"""
-                    <div style="display:flex;gap:1.2rem;margin-bottom:1rem;position:relative;">
-                        <div style="display:flex;flex-direction:column;align-items:center;">
-                            <div style="width:14px;height:14px;border-radius:50%;background:#1b4d3e;border:3px solid #86efac;"></div>
-                            <div style="width:2px;flex-grow:1;background:rgba(203, 213, 225, 0.7);margin-top:4px;"></div>
-                        </div>
-                        <div class="glass-card" style="padding:0.9rem 1.35rem;flex:1;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">
-                                <span style="font-size:0.96rem;font-weight:800;color:#103328;">Status: {item['status']}</span>
-                                <span style="font-size:0.8rem;color:#64748b;font-weight:600;">⏱️ {item['changed_at']}</span>
-                            </div>
-                            <div style="font-size:0.9rem;color:#334155;line-height:1.5;">
-                                {item['note'] if item['note'] else 'Complaint update logged into system.'}
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    note_text = item['note'] if item['note'] else 'Complaint update logged into system.'
+                    history_html = (
+                        f'<div style="display:flex;gap:1.2rem;margin-bottom:1rem;position:relative;">'
+                        f'<div style="display:flex;flex-direction:column;align-items:center;">'
+                        f'<div style="width:14px;height:14px;border-radius:50%;background:#1b4d3e;border:3px solid #86efac;"></div>'
+                        f'<div style="width:2px;flex-grow:1;background:rgba(203, 213, 225, 0.7);margin-top:4px;"></div>'
+                        f'</div>'
+                        f'<div class="glass-card" style="padding:0.9rem 1.35rem;flex:1;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;">'
+                        f'<span style="font-size:0.96rem;font-weight:800;color:#103328;">Status: {item["status"]}</span>'
+                        f'<span style="font-size:0.8rem;color:#64748b;font-weight:600;">Timestamp: {item["changed_at"]}</span>'
+                        f'</div>'
+                        f'<div style="font-size:0.9rem;color:#334155;line-height:1.5;">{note_text}</div>'
+                        f'</div></div>'
+                    )
+                    st.markdown(history_html, unsafe_allow_html=True)
+
 
 
 # =============================================================
-# PAGE 5: ADMIN PORTAL
+# PAGE 5: ADMIN PORTAL (COMPLAINT HANDOVER & MANAGEMENT SUITE)
 # =============================================================
-elif st.session_state["nav_page"] == "🛡️ Admin Portal":
-    st.markdown("<div class='section-kicker'>Official Back-Office</div>", unsafe_allow_html=True)
-    st.markdown("## Community Complaints Management Suite")
+elif st.session_state["nav_page"] == "Admin Portal":
+    st.markdown("<div class='section-kicker'>Project Handover & Governance Suite</div>", unsafe_allow_html=True)
+    st.markdown("## Community Complaints Management & BMC Escalation")
 
     if not st.session_state.get("admin_unlocked", False):
-        st.warning("🔒 This portal is restricted to authorized civic administrators.")
+        st.warning("Access Restricted: Please enter the administrator password to manage complaints.")
         with st.container(border=True):
             render_admin_login_dialog()
     else:
@@ -1325,22 +1311,29 @@ elif st.session_state["nav_page"] == "🛡️ Admin Portal":
         c_prog = sum(1 for c in all_comp if c["status"] == "In Progress")
         c_res = sum(1 for c in all_comp if c["status"] == "Resolved")
 
+        # Admin KPI Metrics with Icons
         ak1, ak2, ak3, ak4 = st.columns(4)
-        ak1.metric("Total Complaints", tot)
-        ak2.metric("Pending Review", f"{c_sub + c_rev}")
-        ak3.metric("In Progress", f"{c_prog}")
-        ak4.metric("Resolved Cases", f"{c_res}")
+        ak1.metric("🗂️ Total Complaints", tot)
+        ak2.metric("⏳ Pending Review", f"{c_sub + c_rev}")
+        ak3.metric("🔧 In Progress", f"{c_prog}")
+        ak4.metric("✅ Resolved Cases", f"{c_res}")
 
         st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
         if not all_comp:
             st.info("No complaints registered yet in the database.")
         else:
-            admin_tab_list, admin_tab_update = st.tabs(["📋 View All Registered Issues", "✏️ Update Complaint Status"])
+            admin_tab_list, admin_tab_manage = st.tabs([
+                "View and Export All Complaints",
+                "Edit and Escalate to BMC"
+            ])
             
             with admin_tab_list:
                 df_admin = pd.DataFrame([dict(c) for c in all_comp])
-                f_status = st.selectbox("Filter complaints by status", ["All"] + COMPLAINT_STATUSES, key="adm_status_filter_table")
+                
+                f_c1, f_c2 = st.columns([1.5, 2])
+                with f_c1:
+                    f_status = st.selectbox("Filter complaints by status", ["All"] + COMPLAINT_STATUSES, key="adm_status_filter_table")
                 if f_status != "All":
                     df_admin = df_admin[df_admin["status"] == f_status]
 
@@ -1351,6 +1344,7 @@ elif st.session_state["nav_page"] == "🛡️ Admin Portal":
                         "created_at": st.column_config.DatetimeColumn("Registered", format="YYYY-MM-DD HH:mm"),
                         "category": "Category",
                         "location": "Location",
+                        "description": "Description",
                         "status": "Current Status",
                         "updated_at": "Last Updated",
                     },
@@ -1358,65 +1352,151 @@ elif st.session_state["nav_page"] == "🛡️ Admin Portal":
                     use_container_width=True,
                 )
 
-            with admin_tab_update:
-                st.markdown("#### Status Progression Action Panel")
+                # Export CSV button specifically for BMC submission handover
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                csv_for_bmc = df_admin.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="Export Complaints Report for BMC Submission (CSV)",
+                    data=csv_for_bmc,
+                    file_name="tilak_nagar_complaints_for_bmc.csv",
+                    mime="text/csv",
+                    key="btn_export_bmc_csv"
+                )
+
+            with admin_tab_manage:
+                st.markdown("#### Complaint Editor & BMC Handover Action Center")
+                st.caption("Select any complaint to review, edit details, attach BMC reference tokens, or prepare official escalation notices.")
+                
                 complaint_id_list = [c["complaint_id"] for c in all_comp]
-                selected_adm_id = st.selectbox("Select Complaint to Update", complaint_id_list, key="adm_select_case_box")
+                selected_adm_id = st.selectbox("Select Complaint to Edit / Manage", complaint_id_list, key="adm_select_case_box")
                 
                 target_case = find_complaint(selected_adm_id)
                 if target_case:
-                    t_col1, t_col2 = st.columns([1.5, 1])
-                    with t_col1:
+                    e_col1, e_col2 = st.columns([1.3, 1.7])
+                    
+                    with e_col1:
                         st.markdown(f"""
                         <div class="glass-card" style="margin-bottom:1rem;">
-                            <div style="font-size:1.15rem;font-weight:800;color:#103328;">{target_case['complaint_id']}</div>
-                            <div style="font-size:0.9rem;color:#334155;margin-top:0.4rem;"><b>Category:</b> {target_case['category']}</div>
-                            <div style="font-size:0.9rem;color:#334155;"><b>Location:</b> {target_case['location']}</div>
-                            <div style="font-size:0.9rem;color:#334155;margin-top:0.4rem;"><b>Description:</b> {target_case['description']}</div>
-                            <div style="font-size:0.86rem;color:#64748b;margin-top:0.5rem;"><b>Current Status:</b> <span class="info-badge">{target_case['status']}</span></div>
+                            <div style="font-size:1.15rem;font-weight:800;color:#103328;">Complaint: {target_case['complaint_id']}</div>
+                            <div style="font-size:0.88rem;color:#56685d;margin-top:0.2rem;">Registered on: {target_case['created_at']}</div>
+                            <div style="margin-top:0.75rem;">
+                                <span class="info-badge">Current Status: {target_case['status']}</span>
+                            </div>
                         </div>
                         """, unsafe_allow_html=True)
 
                         if target_case["photo_name"]:
                             p_path = Path(__file__).resolve().parent / "complaints" / "uploads" / target_case["photo_name"]
                             if p_path.exists():
-                                st.image(str(p_path), caption="Attached Photo", width=340)
+                                st.image(str(p_path), caption="Attached Photo Evidence", use_container_width=True)
 
-                    with t_col2:
+                        with st.expander("Delete or Archive This Complaint", expanded=False):
+                            st.caption("Use this only if the complaint is spam, duplicate, or a test submission.")
+                            if st.button("Permanently Delete Complaint", key="btn_del_complaint"):
+                                delete_complaint(selected_adm_id)
+                                st.success(f"Complaint {selected_adm_id} deleted.")
+                                st.rerun()
+
+                    with e_col2:
+                        st.markdown("<div class='glass-card'>", unsafe_allow_html=True)
+                        st.markdown("##### 1. Edit Complaint Fields")
+                        
+                        edit_cat_idx = CIVIC_CATEGORIES.index(target_case["category"]) if target_case["category"] in CIVIC_CATEGORIES else 0
+                        new_cat = st.selectbox("Category", CIVIC_CATEGORIES, index=edit_cat_idx, key="edit_field_cat")
+                        
+                        new_loc = st.text_input("Location", value=target_case["location"], key="edit_field_loc")
+                        new_desc = st.text_area("Description", value=target_case["description"], key="edit_field_desc", height=100)
+                        
                         current_status_idx = COMPLAINT_STATUSES.index(target_case["status"]) if target_case["status"] in COMPLAINT_STATUSES else 0
                         new_status = st.selectbox(
-                            "Select New Status",
+                            "Resolution Status",
                             COMPLAINT_STATUSES,
                             index=current_status_idx,
                             key="adm_new_status_box"
                         )
+
+                        st.markdown("##### 2. BMC Reporting & Handover Details")
+                        st.caption("When you report this issue to BMC, record the action note or reference number below:")
                         
-                        st.caption("Quick Note Templates:")
-                        n_col1, n_col2 = st.columns(2)
-                        with n_col1:
-                            if st.button("Forwarded to crew", key="adm_btn_fwd", use_container_width=True):
-                                st.session_state["adm_audit_note_field"] = "Forwarded to Ward L municipal inspection crew."
-                        with n_col2:
-                            if st.button("Field repair done", key="adm_btn_rep", use_container_width=True):
-                                st.session_state["adm_audit_note_field"] = "Field inspection completed and issue repaired on site."
+                        qn_col1, qn_col2 = st.columns(2)
+                        with qn_col1:
+                            if st.button("Reported to BMC 1916", key="qn_bmc1916", use_container_width=True):
+                                st.session_state["adm_audit_note_field"] = "Reported to BMC 1916 Helpline for urgent ward escalation."
+                        with qn_col2:
+                            if st.button("Field Resolved", key="qn_resolved", use_container_width=True):
+                                st.session_state["adm_audit_note_field"] = "Verified on site: Issue repaired and resolved by municipal staff."
 
                         update_note = st.text_input(
-                            "Official Audit Note",
+                            "Administrative Action / BMC Escalation Note",
                             value=st.session_state.get("adm_audit_note_field", ""),
+                            placeholder="e.g. Forwarded to Ward L inspection supervisor. BMC Token: WARD-L-9821",
                             key="adm_audit_note_field"
                         )
 
-                        if st.button("💾 Save Status Update", type="primary", use_container_width=True):
+                        if st.button("Save All Updates to Database", type="primary", use_container_width=True):
                             now_time = current_time()
-                            update_complaint_status(selected_adm_id, new_status, update_note.strip(), now_time)
-                            st.success(f"Complaint {selected_adm_id} updated to '{new_status}'.")
+                            update_complaint_full(
+                                selected_adm_id,
+                                new_cat,
+                                new_loc.strip(),
+                                new_desc.strip(),
+                                new_status,
+                                update_note.strip() if update_note.strip() else f"Status updated to {new_status}",
+                                now_time
+                            )
+                            st.success(f"Complaint {selected_adm_id} updated successfully.")
                             st.rerun()
+
+                        st.markdown("</div>", unsafe_allow_html=True)
+
+                    st.markdown("---")
+                    st.markdown("##### Generate Formal BMC Escalation Letter")
+                    st.caption("The coordinator can copy or print this formatted draft letter to hand over or submit directly to the BMC Ward Office:")
+                    
+                    mapped_wing = DEPARTMENT_MAPPING.get(new_cat, "General Municipal Services")
+                    bmc_letter_draft = f"""TO:
+The Assistant Municipal Commissioner,
+Municipal Corporation of Greater Mumbai (BMC),
+Ward L / Ward M-West Administrative Office,
+Mumbai, Maharashtra.
+
+SUBJECT: Escalation of Civic Grievance - {new_cat} at {new_loc}
+REFERENCE ID: {selected_adm_id}
+DATE: {datetime.now().strftime("%d-%B-%Y")}
+
+Respected Sir / Madam,
+
+This formal representation is submitted on behalf of the residents of Tilak Nagar regarding an unresolved local civic grievance registered in our community monitoring portal:
+
+1. Complaint Reference ID: {selected_adm_id}
+2. Service Area: {new_cat} (Responsible Wing: {mapped_wing})
+3. Exact Location: {new_loc}
+4. Date Reported: {target_case['created_at']}
+5. Current Status in Community Portal: {new_status}
+
+ISSUE DESCRIPTION:
+"{new_desc}"
+
+Kindly assign your ward inspection and maintenance crew to address this issue at the earliest to ensure public health and citizen safety in Tilak Nagar.
+
+Sincerely,
+Tilak Nagar Civic Pulse Community Coordinator / Representative
+Mumbai, Ward L / M-West"""
+
+                    st.text_area("BMC Escalation Letter Draft", bmc_letter_draft, height=260)
+                    st.download_button(
+                        label="Download BMC Letter Draft (.txt)",
+                        data=bmc_letter_draft.encode("utf-8"),
+                        file_name=f"BMC_Escalation_{selected_adm_id}.txt",
+                        mime="text/plain",
+                        key="btn_download_bmc_letter"
+                    )
 
 
 # =============================================================
 # PAGE 6: ABOUT
 # =============================================================
-elif st.session_state["nav_page"] == "ℹ️ About":
+elif st.session_state["nav_page"] == "About":
     st.markdown("<div class='section-kicker'>Project Scope & Purpose</div>", unsafe_allow_html=True)
     st.markdown("## About this project")
     
@@ -1424,9 +1504,9 @@ elif st.session_state["nav_page"] == "ℹ️ About":
     <div class="glass-card" style="margin-bottom:1.5rem;">
         <h3 style="margin-top:0;color:#103328;">Tilak Nagar Civic Pulse</h3>
         <p style="font-size:1.02rem;color:#334155;line-height:1.75;">
-            Resident Satisfaction with Local Services in Tilak Nagar, Mumbai, is a student data science project. 
-            It uses survey data to summarize residents' views about local services and provides a separate place 
-            to record and track community issues.
+            Resident Satisfaction with Local Services in Tilak Nagar, Mumbai, is an independent data science and community governance project. 
+            It uses survey data to summarize residents' views about local services and provides an accountable, centralized portal 
+            for community coordinators to document, audit, and systematically escalate civic issues to municipal authorities.
         </p>
     </div>
     """, unsafe_allow_html=True)
@@ -1435,7 +1515,6 @@ elif st.session_state["nav_page"] == "ℹ️ About":
     with col_a1:
         st.markdown("""
         <div class="spotlight-card">
-            <div style="font-size:2rem;margin-bottom:0.4rem;">📊</div>
             <div style="font-weight:800;font-size:1.15rem;color:#103328;margin-bottom:0.4rem;">Survey Analysis</div>
             <div style="font-size:0.9rem;color:#56685d;line-height:1.55;">
                 Clean and analyze survey responses with interactive charts that update automatically from the CSV data.
@@ -1446,10 +1525,9 @@ elif st.session_state["nav_page"] == "ℹ️ About":
     with col_a2:
         st.markdown("""
         <div class="spotlight-card">
-            <div style="font-size:2rem;margin-bottom:0.4rem;">🗂️</div>
             <div style="font-weight:800;font-size:1.15rem;color:#103328;margin-bottom:0.4rem;">Issue Tracking</div>
             <div style="font-size:0.9rem;color:#56685d;line-height:1.55;">
-                Store community complaints in a separate SQLite database with a 5-stage visual resolution tracker.
+                Store community complaints in a separate SQLite database with a 5-stage visual resolution tracker and audit timeline.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1457,10 +1535,9 @@ elif st.session_state["nav_page"] == "ℹ️ About":
     with col_a3:
         st.markdown("""
         <div class="spotlight-card">
-            <div style="font-size:2rem;margin-bottom:0.4rem;">🛡️</div>
-            <div style="font-weight:800;font-size:1.15rem;color:#103328;margin-bottom:0.4rem;">Admin Control</div>
+            <div style="font-weight:800;font-size:1.15rem;color:#103328;margin-bottom:0.4rem;">Admin Control & Handover</div>
             <div style="font-size:0.9rem;color:#56685d;line-height:1.55;">
-                Allow complaint status updates through an authorized admin process protected by configured SHA-256 password.
+                Enables full complaint editing, audit note logging, and one-click BMC escalation letter generation for project handover.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1468,7 +1545,7 @@ elif st.session_state["nav_page"] == "ℹ️ About":
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
     st.markdown("""
     <div style="background:rgba(254, 243, 199, 0.7);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid #fcd34d;border-radius:16px;padding:1.1rem 1.5rem;font-size:0.92rem;color:#92400e;line-height:1.65;box-shadow:var(--glass-shadow);">
-        ⚠️ <b>Important note:</b> This portal is an independent student prototype. It is not an official BMC service. 
-        Complaints stored here are not automatically sent to municipal departments or emergency dispatchers.
+        <b>Important Note:</b> This portal is an independent community prototype. It does not automatically dispatch crews; 
+        rather, it empowers community coordinators to document and formally escalate issues to BMC Ward L / M-West offices.
     </div>
     """, unsafe_allow_html=True)
