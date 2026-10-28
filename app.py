@@ -1557,3 +1557,56 @@ elif st.session_state["nav_page"] == "About":
         rather, it empowers community coordinators to document and formally escalate issues to BMC Ward L / M-West offices.
     </div>
     """, unsafe_allow_html=True)
+
+
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-kicker'>Academic & Institutional Attribution</div>", unsafe_allow_html=True)
+    st.markdown("### Project Credentials & Research Team")
+
+    cred_col1, cred_col2 = st.columns(2)
+    with cred_col1:
+        st.markdown('''
+        <div class="glass-card" style="height:100%;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.75rem;">
+                <span style="font-size:1.6rem;">👨‍🎓</span>
+                <div>
+                    <div style="font-size:0.8rem;text-transform:uppercase;font-weight:800;color:#56685d;letter-spacing:0.04em;">Student Researcher</div>
+                    <div style="font-size:1.2rem;font-weight:800;color:#103328;">Pavan Suresh Pal</div>
+                </div>
+            </div>
+            <div style="font-size:0.92rem;color:#334155;line-height:1.75;">
+                • <b>Roll Number:</b> 27<br>
+                • <b>Program:</b> T.Y.B.Sc. Data Science (Semester V)<br>
+                • <b>Academic Year:</b> 2024 – 2025<br>
+                • <b>Institution:</b> N. G. Acharya & D. K. Marathe College of Arts, Science & Commerce<br>
+                • <b>Contact Email:</b> <a href="mailto:pavanpal00000@gmail.com" style="color:#1b4d3e;font-weight:600;text-decoration:none;">pavanpal00000@gmail.com</a>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    with cred_col2:
+        st.markdown('''
+        <div class="glass-card" style="height:100%;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:0.75rem;">
+                <span style="font-size:1.6rem;">👩‍🏫</span>
+                <div>
+                    <div style="font-size:0.8rem;text-transform:uppercase;font-weight:800;color:#56685d;letter-spacing:0.04em;">Faculty Project Guide</div>
+                    <div style="font-size:1.2rem;font-weight:800;color:#103328;">Ms. Kohinoor Khan</div>
+                </div>
+            </div>
+            <div style="font-size:0.92rem;color:#334155;line-height:1.75;">
+                • <b>Department:</b> Department of Data Science<br>
+                • <b>College:</b> N. G. Acharya & D. K. Marathe College<br>
+                • <b>Campus:</b> N. G. Acharya Marg, Chembur, Mumbai — 400 071<br>
+                • <b>Affiliation:</b> University of Mumbai<br>
+                • <b>Project Scope:</b> Citizen Satisfaction Analytics & Issue Redressal
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+
+    st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+    st.markdown('''
+    <div style="text-align:center;font-size:0.86rem;color:#64748b;padding:1rem 0;border-top:1px solid #e2e8f0;margin-top:1.5rem;">
+        Tilak Nagar Civic Pulse • Designed & Developed by <b>Pavan Suresh Pal (Roll No. 27)</b> • Guided by <b>Ms. Kohinoor Khan</b> • N. G. Acharya & D. K. Marathe College
+    </div>
+    ''', unsafe_allow_html=True)

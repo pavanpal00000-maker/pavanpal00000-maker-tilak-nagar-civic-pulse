@@ -102,7 +102,8 @@ class TestUIAndCivicHelpers(unittest.TestCase):
         img_io.size = len(img_io.getbuffer())
         saved_name = save_complaint_photo(img_io)
         self.assertIsNotNone(saved_name)
-        saved_file = Path("complaints/uploads") / saved_name
+        from utils.image_handler import UPLOAD_FOLDER
+        saved_file = UPLOAD_FOLDER / saved_name
         self.assertTrue(saved_file.exists())
         saved_file.unlink()  # Clean up test file
 
