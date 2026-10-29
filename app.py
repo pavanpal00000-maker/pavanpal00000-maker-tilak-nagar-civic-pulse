@@ -767,15 +767,17 @@ if st.session_state["nav_page"] == "Home":
     st.markdown("<div class='section-kicker'>Live Grievance Redressal</div>", unsafe_allow_html=True)
     c_head1, c_head2 = st.columns([3.2, 1])
     with c_head1:
-        st.markdown("### 📋 Active Community Complaints & Resolution Status")
-        st.caption("Civic issues registered by Tilak Nagar residents across municipal departments:")
+        st.markdown("### 📋 Active Community Complaints in Tilak Nagar")
+        st.caption("Civic issues registered by local residents with real-time municipal status:")
     with c_head2:
         if st.button("➕ Report New Issue", key="btn_home_rep_top", use_container_width=True, type="primary"):
             st.session_state["nav_page"] = "Report Issue"
             st.rerun()
 
     if complaints_list:
-        for comp in complaints_list:
+        # Display complaints in a clean, unified two-column grid
+        grid_col1, grid_col2 = st.columns(2)
+        for idx, comp in enumerate(complaints_list):
             c_status = comp["status"]
             if c_status == "Resolved":
                 badge_style = "background:rgba(22, 163, 74, 0.15);color:#16a34a;border:1px solid rgba(22, 163, 74, 0.3);"
@@ -791,30 +793,44 @@ if st.session_state["nav_page"] == "Home":
                 badge_icon = "📥"
 
             dept_name = DEPARTMENT_MAPPING.get(comp["category"], "Municipal Services")
+            target_col = grid_col1 if idx % 2 == 0 else grid_col2
             
-            c_card1, c_card2 = st.columns([3.8, 1.2])
-            with c_card1:
+            with target_col:
                 st.markdown(f"""
-                <div class="glass-card" style="padding:1rem 1.25rem;margin-bottom:0.75rem;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap;gap:6px;">
-                        <div>
-                            <span style="font-family:monospace;font-size:0.95rem;font-weight:800;color:#1b4d3e;">{comp["complaint_id"]}</span>
-                            <span style="font-size:0.82rem;color:#64748b;margin-left:8px;">📅 {comp["created_at"][:10]}</span>
+                <div class="glass-card" style="padding:1.1rem 1.3rem;margin-bottom:0.9rem;min-height:148px;display:flex;flex-direction:column;justify-content:space-between;">
+                    <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;flex-wrap:wrap;gap:6px;">
+                            <span style="font-family:monospace;font-size:0.92rem;font-weight:800;color:#1b4d3e;">{comp["complaint_id"]}</span>
+                            <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.78rem;font-weight:700;{badge_style}">{badge_icon} {c_status}</span>
                         </div>
-                        <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;{badge_style}">{badge_icon} {c_status}</span>
+                        <div style="font-size:0.92rem;font-weight:750;color:#103328;margin-bottom:0.25rem;">📍 {comp["location"]}</div>
+                        <div style="font-size:0.82rem;font-weight:600;color:#245b45;margin-bottom:0.35rem;">🏛️ {comp["category"]} ({dept_name})</div>
+                        <div style="font-size:0.86rem;color:#475569;line-height:1.5;">{comp["description"]}</div>
                     </div>
-                    <div style="font-size:0.92rem;font-weight:700;color:#103328;">📍 {comp["location"]} · <span style="font-weight:600;color:#245b45;">{comp["category"]} ({dept_name})</span></div>
-                    <div style="font-size:0.88rem;color:#475569;margin-top:0.3rem;line-height:1.5;">{comp["description"]}</div>
+                    <div style="font-size:0.78rem;color:#94a3b8;margin-top:0.5rem;border-top:1px dashed #e2e8f0;padding-top:0.35rem;">
+                        📅 Registered: {comp["created_at"][:10]}
+                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-            with c_card2:
-                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
-                if st.button("🔍 Track Issue", key=f"track_home_{comp['complaint_id']}", use_container_width=True):
-                    st.session_state["tracking_search_id"] = comp["complaint_id"]
+
+        # Single, clean unified action bar below all complaints
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        track_bar1, track_bar2 = st.columns([3.2, 1.2])
+        with track_bar1:
+            selected_comp = st.selectbox(
+                "Select any complaint above to track its step-by-step resolution timeline:",
+                ["-- Select a Complaint ID to Track --"] + [f"{c['complaint_id']} — {c['category']} ({c['status']})" for c in complaints_list],
+                key="home_quick_track_dropdown"
+            )
+        with track_bar2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            if st.button("Inspect Timeline ➔", key="btn_home_inspect_track_single", use_container_width=True, type="primary"):
+                if selected_comp != "-- Select a Complaint ID to Track --":
+                    st.session_state["tracking_search_id"] = selected_comp.split(" — ")[0]
                     st.session_state["nav_page"] = "Track Issue"
                     st.rerun()
 
-    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
 
     # Core Charts on Home
     st.markdown("<div class='section-kicker'>At a glance</div>", unsafe_allow_html=True)
@@ -1363,6 +1379,22 @@ elif st.session_state["nav_page"] == "Track Issue":
                         f'</div></div>'
                     )
                     st.markdown(history_html, unsafe_allow_html=True)
+    else:
+        st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+        st.markdown("<div class='section-kicker'>Community Issues Log</div>", unsafe_allow_html=True)
+        st.markdown("### 📋 All Registered Issues in Tilak Nagar")
+        st.caption("Click any Complaint ID button above or enter an ID to view its live progress stepper and audit notes.")
+        if all_recent:
+            df_track_all = pd.DataFrame([
+                {
+                    "Complaint ID": c["complaint_id"],
+                    "Category": c["category"],
+                    "Location": c["location"],
+                    "Status": c["status"],
+                    "Registered": c["created_at"][:10],
+                } for c in all_recent
+            ])
+            st.dataframe(df_track_all, use_container_width=True, hide_index=True)
 
 
 
