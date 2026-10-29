@@ -55,11 +55,9 @@ def setup_database():
 
 
 def seed_initial_demo_complaints():
-    # Insert realistic sample complaints if the database is currently empty.
+    # Insert realistic sample complaints if not already present.
     with get_db() as connection:
-        count = connection.execute("SELECT COUNT(*) FROM complaints").fetchone()[0]
-        if count == 0:
-            sample_data = [
+        sample_data = [
                 (
                     "TNC-20261018-3412",
                     "2026-10-18 09:15:00",
@@ -104,7 +102,9 @@ def seed_initial_demo_complaints():
                     ]
                 ),
             ]
-            for cid, c_at, cat, desc, loc, photo, status, u_at, hist in sample_data:
+        for cid, c_at, cat, desc, loc, photo, status, u_at, hist in sample_data:
+            existing = connection.execute("SELECT 1 FROM complaints WHERE complaint_id = ?", (cid,)).fetchone()
+            if not existing:
                 connection.execute("""
                     INSERT INTO complaints (
                         complaint_id, created_at, category, description,

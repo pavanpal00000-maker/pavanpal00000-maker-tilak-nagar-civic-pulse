@@ -19,6 +19,7 @@ from utils.complaint_tracker import COMPLAINT_STATUSES, make_complaint_id, curre
 from utils.department_mapping import DEPARTMENT_MAPPING
 from database.db import (
     setup_database,
+    seed_initial_demo_complaints,
     save_complaint,
     find_complaint,
     get_complaint_history,
@@ -224,10 +225,14 @@ st.markdown("""
         backdrop-filter: blur(16px) saturate(180%) !important;
         -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
         border: 1px solid var(--glass-border) !important;
-        padding: 1.35rem 1.5rem !important;
+        padding: 1.25rem 1.4rem !important;
         border-radius: 20px !important;
         box-shadow: var(--glass-shadow), inset 0 1px 1px rgba(255, 255, 255, 0.8) !important;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        min-height: 140px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
     }
 
     [data-testid="stMetric"]:hover {
@@ -706,13 +711,16 @@ if st.session_state["nav_page"] == "Home":
 
     # Quantitative Metrics with KPI Icons
     complaints_list = get_all_complaints()
+    if not complaints_list:
+        seed_initial_demo_complaints()
+        complaints_list = get_all_complaints()
     total_complaints = len(complaints_list)
     resolved_count = sum(1 for c in complaints_list if c["status"] == "Resolved")
     tilak_residents = int((data[LOCALITY_COLUMN].astype(str).str.lower() == "tilak nagar").sum())
     overall_avg = data["Overall rating"].mean() if data["Overall rating"].notna().any() else 0
 
     first_metric, second_metric, third_metric, fourth_metric = st.columns(4)
-    first_metric.metric("📊 Survey Responses", len(data), help="Total resident survey submissions collected.")
+    first_metric.metric("📊 Survey Responses", f"{len(data)}", "50 valid responses")
     second_metric.metric("🏘️ Tilak Nagar Residents", f"{tilak_residents}", f"{(tilak_residents/len(data)*100):.0f}% of sample" if len(data)>0 else "0%")
     third_metric.metric("⭐ Satisfaction Score", f"{overall_avg:.2f} / 5", "Scale 1 to 5")
     fourth_metric.metric("📋 Tracked Civic Issues", f"{total_complaints}", f"{resolved_count} resolved")
@@ -754,6 +762,59 @@ if st.session_state["nav_page"] == "Home":
             """, unsafe_allow_html=True)
 
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
+
+    # ── Community Complaints & Transparency Section ──
+    st.markdown("<div class='section-kicker'>Live Grievance Redressal</div>", unsafe_allow_html=True)
+    c_head1, c_head2 = st.columns([3.2, 1])
+    with c_head1:
+        st.markdown("### 📋 Active Community Complaints & Resolution Status")
+        st.caption("Civic issues registered by Tilak Nagar residents across municipal departments:")
+    with c_head2:
+        if st.button("➕ Report New Issue", key="btn_home_rep_top", use_container_width=True, type="primary"):
+            st.session_state["nav_page"] = "Report Issue"
+            st.rerun()
+
+    if complaints_list:
+        for comp in complaints_list:
+            c_status = comp["status"]
+            if c_status == "Resolved":
+                badge_style = "background:rgba(22, 163, 74, 0.15);color:#16a34a;border:1px solid rgba(22, 163, 74, 0.3);"
+                badge_icon = "✅"
+            elif c_status == "In Progress":
+                badge_style = "background:rgba(37, 99, 235, 0.15);color:#2563eb;border:1px solid rgba(37, 99, 235, 0.3);"
+                badge_icon = "🔧"
+            elif c_status == "Under Review":
+                badge_style = "background:rgba(217, 119, 6, 0.15);color:#d97706;border:1px solid rgba(217, 119, 6, 0.3);"
+                badge_icon = "⏳"
+            else:
+                badge_style = "background:rgba(100, 116, 139, 0.15);color:#475569;border:1px solid rgba(100, 116, 139, 0.3);"
+                badge_icon = "📥"
+
+            dept_name = DEPARTMENT_MAPPING.get(comp["category"], "Municipal Services")
+            
+            c_card1, c_card2 = st.columns([3.8, 1.2])
+            with c_card1:
+                st.markdown(f"""
+                <div class="glass-card" style="padding:1rem 1.25rem;margin-bottom:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem;flex-wrap:wrap;gap:6px;">
+                        <div>
+                            <span style="font-family:monospace;font-size:0.95rem;font-weight:800;color:#1b4d3e;">{comp["complaint_id"]}</span>
+                            <span style="font-size:0.82rem;color:#64748b;margin-left:8px;">📅 {comp["created_at"][:10]}</span>
+                        </div>
+                        <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:0.8rem;font-weight:700;{badge_style}">{badge_icon} {c_status}</span>
+                    </div>
+                    <div style="font-size:0.92rem;font-weight:700;color:#103328;">📍 {comp["location"]} · <span style="font-weight:600;color:#245b45;">{comp["category"]} ({dept_name})</span></div>
+                    <div style="font-size:0.88rem;color:#475569;margin-top:0.3rem;line-height:1.5;">{comp["description"]}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c_card2:
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+                if st.button("🔍 Track Issue", key=f"track_home_{comp['complaint_id']}", use_container_width=True):
+                    st.session_state["tracking_search_id"] = comp["complaint_id"]
+                    st.session_state["nav_page"] = "Track Issue"
+                    st.rerun()
+
+    st.markdown("<div style='height:20px'></div>", unsafe_allow_html=True)
 
     # Core Charts on Home
     st.markdown("<div class='section-kicker'>At a glance</div>", unsafe_allow_html=True)
@@ -1199,12 +1260,17 @@ elif st.session_state["nav_page"] == "Track Issue":
     st.caption("Search for a registered community issue using its unique project portal ID.")
 
     all_recent = get_all_complaints()
+    if not all_recent:
+        seed_initial_demo_complaints()
+        all_recent = get_all_complaints()
+
     if all_recent:
-        st.markdown("<div style='font-size:0.84rem;font-weight:700;color:#56685d;margin-bottom:6px;'>Sample IDs to test:</div>", unsafe_allow_html=True)
-        s_cols = st.columns(min(len(all_recent), 3))
-        for idx, sample in enumerate(all_recent[:3]):
+        st.markdown("<div style='font-size:0.84rem;font-weight:700;color:#56685d;margin-bottom:6px;'>Quick Select Complaint ID:</div>", unsafe_allow_html=True)
+        s_cols = st.columns(min(len(all_recent), 4))
+        for idx, sample in enumerate(all_recent[:4]):
             with s_cols[idx]:
-                if st.button(f"{sample['complaint_id']}", key=f"chip_track_{sample['complaint_id']}", use_container_width=True):
+                c_lbl = f"{sample['complaint_id']} ({sample['status']})"
+                if st.button(c_lbl, key=f"chip_track_{sample['complaint_id']}", use_container_width=True):
                     st.session_state["tracking_search_id"] = sample['complaint_id']
                     st.rerun()
 
